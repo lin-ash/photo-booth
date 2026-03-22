@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Booth</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Landing Screen -->
+    <div id="landing-screen" class="screen active">
+      <div class="landing-content">
+        <h1 class="logo">Photo Booth</h1>
+        <p class="tagline">Strike a pose. Make it yours. Keep it forever.</p>
+        <button id="start-btn" class="btn btn-primary btn-large">Let's Go!</button>
+      </div>
+    </div>
+
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="screen">
+      <h2>Customize Your Strip</h2>
+
+      <div class="setup-section">
+        <h3>Photo Filter</h3>
+        <div class="option-group">
+          <button class="option-btn active" data-filter="color">Color</button>
+          <button class="option-btn" data-filter="bw">Black & White</button>
+        </div>
+      </div>
+
+      <div class="setup-section">
+        <h3>Border Style</h3>
+        <div class="option-group">
+          <button class="option-btn active" data-border="solid">Solid Color</button>
+          <button class="option-btn" data-border="tape">Vintage Tape</button>
+        </div>
+      </div>
+
+      <div id="color-picker-section" class="setup-section">
+        <h3>Border Color</h3>
+        <div class="color-swatches">
+          <button class="swatch active" data-color="#ffffff" style="background:#ffffff"></button>
+          <button class="swatch" data-color="#000000" style="background:#000000"></button>
+          <button class="swatch" data-color="#e74c3c" style="background:#e74c3c"></button>
+          <button class="swatch" data-color="#e91e63" style="background:#e91e63"></button>
+          <button class="swatch" data-color="#9b59b6" style="background:#9b59b6"></button>
+          <button class="swatch" data-color="#3498db" style="background:#3498db"></button>
+          <button class="swatch" data-color="#1abc9c" style="background:#1abc9c"></button>
+          <button class="swatch" data-color="#2ecc71" style="background:#2ecc71"></button>
+          <button class="swatch" data-color="#f39c12" style="background:#f39c12"></button>
+          <button class="swatch" data-color="#fd79a8" style="background:#fd79a8"></button>
+        </div>
+      </div>
+
+      <div class="setup-section">
+        <h3>Number of Photos</h3>
+        <div class="option-group">
+          <button class="option-btn" data-count="3">3</button>
+          <button class="option-btn active" data-count="4">4</button>
+        </div>
+      </div>
+
+      <button id="to-camera-btn" class="btn btn-primary">Open Camera</button>
+    </div>
+
+    <!-- Camera Screen -->
+    <div id="camera-screen" class="screen">
+      <div class="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="flash-overlay"></canvas>
+        <div id="countdown" class="countdown hidden"></div>
+      </div>
+      <div class="camera-controls">
+        <p id="photo-progress">Photo <span id="current-count">1</span> of <span id="total-count">4</span></p>
+        <button id="capture-btn" class="btn btn-capture">
+          <span class="shutter-icon"></span>
+        </button>
+        <button id="retake-btn" class="btn btn-secondary hidden">Retake Last</button>
+      </div>
+    </div>
+
+    <!-- Sticker / Edit Screen -->
+    <div id="edit-screen" class="screen">
+      <h2>Decorate Your Strip</h2>
+      <div class="edit-layout">
+        <div class="strip-preview-wrapper">
+          <canvas id="strip-canvas"></canvas>
+          <div id="sticker-layer"></div>
+        </div>
+        <div class="sticker-panel">
+          <h3>Stickers</h3>
+          <div class="sticker-grid" id="sticker-grid"></div>
+          <button id="undo-sticker-btn" class="btn btn-secondary btn-small">Undo Last Sticker</button>
+        </div>
+      </div>
+      <div class="edit-actions">
+        <button id="save-btn" class="btn btn-primary">Save to Device</button>
+        <button id="retake-all-btn" class="btn btn-secondary">Start Over</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
