@@ -22,6 +22,7 @@
   };
 
   const video         = $('#video');
+  const previewVideo  = $('#preview-video');
   const flashOverlay  = $('#flash-overlay');
   const countdownEl   = $('#countdown');
   const currentCountEl = $('#current-count');
@@ -32,6 +33,8 @@
   const stickerLayer  = $('#sticker-layer');
   const stickerGrid   = $('#sticker-grid');
   const colorPickerSection = $('#color-picker-section');
+  const previewCanvas = $('#preview-canvas');
+  const previewVideoLayer = $('#preview-video-layer');
 
   // ── Sticker list ──
   const STICKERS = [
@@ -39,6 +42,117 @@
     '😎','🥳','😍','🤪','👑','💋','🎀','🌟','💐','🍭',
     '🧸','🎈','💎','🪩','🫧','☀️','🌙','🍒','🐱','🦄',
   ];
+
+  // ── Preview ──
+  let previewStream = null;
+
+  async function startPreviewCamera() {
+    try {
+      previewStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false,
+      });
+      previewVideo.srcObject = previewStream;
+    } catch (err) {
+      // Preview is non-critical, silently fail
+    }
+  }
+
+  function stopPreviewCamera() {
+    if (previewStream) {
+      previewStream.getTracks().forEach(t => t.stop());
+      previewStream = null;
+    }
+  }
+
+  function updatePreview() {
+    const count = state.photoCount;
+    const padding = 30;
+    const gap = 16;
+    const photoW = 400;
+    const photoH = 300;
+    const bottomExtra = 60;
+
+    const stripW = photoW + padding * 2;
+    const stripH = padding + (photoH + gap) * count - gap + padding + bottomExtra;
+
+    // Draw the preview canvas at full res, CSS scales it down
+    previewCanvas.width = stripW;
+    previewCanvas.height = stripH;
+    const ctx = previewCanvas.getContext('2d');
+
+    // Draw background (same logic as renderStrip)
+    if (state.borderStyle === 'tape') {
+      drawTapeBorder(ctx, stripW, stripH);
+    } else {
+      ctx.fillStyle = state.borderColor;
+      ctx.fillRect(0, 0, stripW, stripH);
+    }
+
+    // Draw placeholder rectangles for each photo slot
+    for (let i = 0; i < count; i++) {
+      const x = padding;
+      const y = padding + i * (photoH + gap);
+      const r = 6;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + photoW - r, y);
+      ctx.quadraticCurveTo(x + photoW, y, x + photoW, y + r);
+      ctx.lineTo(x + photoW, y + photoH - r);
+      ctx.quadraticCurveTo(x + photoW, y + photoH, x + photoW - r, y + photoH);
+      ctx.lineTo(x + r, y + photoH);
+      ctx.quadraticCurveTo(x, y + photoH, x, y + photoH - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle = state.borderStyle === 'tape' ? '#1a1a1a' : '#dddddd';
+      ctx.fillRect(x, y, photoW, photoH);
+      ctx.restore();
+    }
+
+    // Draw branding text (same as renderStrip)
+    const brandY = stripH - bottomExtra / 2;
+    const textColor = getContrastText(
+      state.borderStyle === 'tape' ? '#000000' : state.borderColor
+    );
+    ctx.fillStyle = textColor;
+    ctx.globalAlpha = 0.5;
+    ctx.font = '600 14px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Photo Booth', stripW / 2, brandY + 2);
+    ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString(), stripW / 2, brandY + 20);
+    ctx.globalAlpha = 1;
+
+    // Position live video elements over the photo slots
+    previewVideoLayer.innerHTML = '';
+    const scaleX = 200 / stripW;
+
+    for (let i = 0; i < count; i++) {
+      const x = padding;
+      const y = padding + i * (photoH + gap);
+
+      const slot = document.createElement('div');
+      slot.className = 'preview-video-slot' + (state.filter === 'bw' ? ' bw-preview' : '');
+      slot.style.left = (x * scaleX) + 'px';
+      slot.style.top = (y * scaleX) + 'px';
+      slot.style.width = (photoW * scaleX) + 'px';
+      slot.style.height = (photoH * scaleX) + 'px';
+
+      const vid = document.createElement('video');
+      vid.autoplay = true;
+      vid.playsInline = true;
+      vid.muted = true;
+      if (previewStream) {
+        vid.srcObject = previewStream;
+      }
+      slot.appendChild(vid);
+      previewVideoLayer.appendChild(slot);
+    }
+  }
 
   // ── Screen navigation ──
   function showScreen(name) {
@@ -63,6 +177,7 @@
       $$('[data-filter]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.filter = btn.dataset.filter;
+      updatePreview();
     });
   });
 
@@ -73,6 +188,7 @@
       btn.classList.add('active');
       state.borderStyle = btn.dataset.border;
       colorPickerSection.classList.toggle('hidden', state.borderStyle === 'tape');
+      updatePreview();
     });
   });
 
@@ -82,6 +198,7 @@
       $$('[data-count]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.photoCount = parseInt(btn.dataset.count);
+      updatePreview();
     });
   });
 
@@ -91,6 +208,7 @@
       $$('.swatch').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.borderColor = btn.dataset.color;
+      updatePreview();
     });
   });
 
@@ -275,7 +393,7 @@
             // Draw branding text
             const brandY = stripH - bottomExtra / 2;
             const textColor = getContrastText(
-              state.borderStyle === 'tape' ? '#f5e6d0' : state.borderColor
+              state.borderStyle === 'tape' ? '#000000' : state.borderColor
             );
             ctx.fillStyle = textColor;
             ctx.globalAlpha = 0.5;
@@ -294,53 +412,63 @@
   }
 
   function drawTapeBorder(ctx, w, h) {
-    // Warm vintage paper base
-    ctx.fillStyle = '#f5e6d0';
+    // Black film base
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, h);
 
-    // Film sprocket holes along left and right edges
-    const holeRadius = 5;
+    // Sprocket holes — rectangular with rounded corners, along both edges
+    const holeW = 10;
+    const holeH = 7;
     const holeSpacing = 20;
-    const holeMargin = 10;
-    ctx.fillStyle = '#d4c4a8';
-    for (let y = 10; y < h; y += holeSpacing) {
-      // Left holes
-      ctx.beginPath();
-      ctx.arc(holeMargin, y, holeRadius, 0, Math.PI * 2);
+    const holeR = 1.5;
+    const marginX = 6;
+
+    ctx.fillStyle = '#ffffff';
+    for (let y = 8; y < h; y += holeSpacing) {
+      // Left sprocket hole
+      drawRoundRect(ctx, marginX, y, holeW, holeH, holeR);
       ctx.fill();
-      // Right holes
-      ctx.beginPath();
-      ctx.arc(w - holeMargin, y, holeRadius, 0, Math.PI * 2);
+      // Right sprocket hole
+      drawRoundRect(ctx, w - marginX - holeW, y, holeW, holeH, holeR);
       ctx.fill();
     }
 
-    // Subtle horizontal tape lines
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+    // Subtle film edge lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 1;
-    for (let y = 0; y < h; y += 6) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(marginX + holeW + 4, 0);
+    ctx.lineTo(marginX + holeW + 4, h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w - marginX - holeW - 4, 0);
+    ctx.lineTo(w - marginX - holeW - 4, h);
+    ctx.stroke();
 
-    // Grain noise overlay
+    // Film grain noise
     const imageData = ctx.getImageData(0, 0, w, h);
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
-      const noise = (Math.random() - 0.5) * 15;
+      const noise = (Math.random() - 0.5) * 10;
       data[i] += noise;
       data[i + 1] += noise;
       data[i + 2] += noise;
     }
     ctx.putImageData(imageData, 0, 0);
+  }
 
-    // Aged vignette
-    const gradient = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7);
-    gradient.addColorStop(0, 'rgba(0,0,0,0)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0.12)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, h);
+  function drawRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
   function getContrastText(bgColor) {
@@ -481,9 +609,14 @@
   }
 
   // ── Navigation event listeners ──
-  $('#start-btn').addEventListener('click', () => showScreen('setup'));
+  $('#start-btn').addEventListener('click', async () => {
+    showScreen('setup');
+    await startPreviewCamera();
+    updatePreview();
+  });
 
   $('#to-camera-btn').addEventListener('click', async () => {
+    stopPreviewCamera();
     state.photos = [];
     currentCountEl.textContent = '1';
     totalCountEl.textContent = state.photoCount;
@@ -499,10 +632,12 @@
   $('#undo-sticker-btn').addEventListener('click', undoSticker);
   $('#save-btn').addEventListener('click', saveStrip);
 
-  $('#retake-all-btn').addEventListener('click', () => {
+  $('#retake-all-btn').addEventListener('click', async () => {
     state.photos = [];
     state.stickers = [];
     stickerLayer.innerHTML = '';
     showScreen('setup');
+    await startPreviewCamera();
+    updatePreview();
   });
 })();
