@@ -2,11 +2,12 @@
   // ── State ──
   const state = {
     filter: 'color',       // 'color' | 'bw'
-    borderStyle: 'solid',  // 'solid' | 'tape'
+    borderStyle: 'solid',  // 'solid' | 'tape' | 'template'
     borderColor: '#ffffff',
+    borderTemplate: null,  // selected STRIP_TEMPLATES entry
     photoCount: 4,
     photos: [],            // captured image data URLs
-    stickers: [],          // { emoji, x%, y% }
+    stickers: [],          // { src, el }
     stream: null,
   };
 
@@ -33,15 +34,79 @@
   const stickerLayer  = $('#sticker-layer');
   const stickerGrid   = $('#sticker-grid');
   const colorPickerSection = $('#color-picker-section');
+  const templateGrid = $('#template-grid');
   const previewCanvas = $('#preview-canvas');
   const previewVideoLayer = $('#preview-video-layer');
+  const previewOverlay = $('#preview-overlay');
 
-  // ── Sticker list ──
-  const STICKERS = [
-    '❤️','⭐','🔥','✨','💖','🌈','🎉','🦋','🌸','💫',
-    '😎','🥳','😍','🤪','👑','💋','🎀','🌟','💐','🍭',
-    '🧸','🎈','💎','🪩','🫧','☀️','🌙','🍒','🐱','🦄',
+  // ── Strip templates ──
+  // 3 layers: background color/image → photos → overlay PNG on top.
+  // background: color string or image path. overlay: transparent PNG in /strip-overlay/.
+  const STRIP_TEMPLATES = [
+    {
+      name: 'Charlie',
+      background: '#ffffff',
+      overlay: 'strip-overlay/charlie-4.png',
+      photoCount: 4,
+    },
   ];
+
+  // ── Sticker list (PNG images in /stickers folder) ──
+  const STICKERS = [
+    { name: 'Charlie', src: 'stickers/charlie.png' },
+  ];
+
+  // ── Template image cache ──
+  const templateImageCache = {};
+
+  function loadTemplateImage(src) {
+    if (templateImageCache[src]) return Promise.resolve(templateImageCache[src]);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { templateImageCache[src] = img; resolve(img); };
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  // ── Template picker ──
+  function populateTemplates() {
+    templateGrid.innerHTML = '';
+
+    // "None" option
+    const noneBtn = document.createElement('button');
+    noneBtn.className = 'template-btn' + (!state.borderTemplate ? ' active' : '');
+    noneBtn.innerHTML = '<span class="template-none">&#10005;</span><span>None</span>';
+    noneBtn.addEventListener('click', () => {
+      state.borderTemplate = null;
+      state.borderStyle = 'solid';
+      templateGrid.querySelectorAll('.template-btn').forEach(b => b.classList.remove('active'));
+      noneBtn.classList.add('active');
+      updatePreview();
+    });
+    templateGrid.appendChild(noneBtn);
+
+    STRIP_TEMPLATES.forEach(template => {
+      const btn = document.createElement('button');
+      btn.className = 'template-btn' + (state.borderTemplate === template ? ' active' : '');
+      const img = document.createElement('img');
+      img.src = template.overlay;
+      img.alt = template.name;
+      img.draggable = false;
+      btn.appendChild(img);
+      const label = document.createElement('span');
+      label.textContent = template.name;
+      btn.appendChild(label);
+      btn.addEventListener('click', () => {
+        state.borderTemplate = template;
+        state.borderStyle = 'template';
+        templateGrid.querySelectorAll('.template-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updatePreview();
+      });
+      templateGrid.appendChild(btn);
+    });
+  }
 
   // ── Preview ──
   let previewStream = null;
@@ -65,36 +130,34 @@
     }
   }
 
-  function updatePreview() {
-    const count = state.photoCount;
+  function getStripLayout(count) {
     const padding = 30;
     const gap = 16;
     const photoW = 400;
     const photoH = 300;
     const bottomExtra = 60;
-
     const stripW = photoW + padding * 2;
     const stripH = padding + (photoH + gap) * count - gap + padding + bottomExtra;
+    return { stripW, stripH, padding, gap, photoW, photoH, bottomExtra };
+  }
 
-    // Draw the preview canvas at full res, CSS scales it down
+  function updatePreview() {
+    const count = state.photoCount;
+    const { stripW, stripH, padding, gap, photoW, photoH, bottomExtra } = getStripLayout(count);
+
     previewCanvas.width = stripW;
     previewCanvas.height = stripH;
     const ctx = previewCanvas.getContext('2d');
 
-    // Draw background (same logic as renderStrip)
-    if (state.borderStyle === 'tape') {
-      drawTapeBorder(ctx, stripW, stripH);
-    } else {
-      ctx.fillStyle = state.borderColor;
-      ctx.fillRect(0, 0, stripW, stripH);
-    }
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, stripW, stripH);
 
-    // Draw placeholder rectangles for each photo slot
+    // Grey photo placeholders
     for (let i = 0; i < count; i++) {
       const x = padding;
       const y = padding + i * (photoH + gap);
       const r = 6;
-
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -108,17 +171,14 @@
       ctx.quadraticCurveTo(x, y, x + r, y);
       ctx.closePath();
       ctx.clip();
-      ctx.fillStyle = state.borderStyle === 'tape' ? '#1a1a1a' : '#dddddd';
+      ctx.fillStyle = '#dddddd';
       ctx.fillRect(x, y, photoW, photoH);
       ctx.restore();
     }
 
-    // Draw branding text (same as renderStrip)
+    // Branding text
     const brandY = stripH - bottomExtra / 2;
-    const textColor = getContrastText(
-      state.borderStyle === 'tape' ? '#000000' : state.borderColor
-    );
-    ctx.fillStyle = textColor;
+    ctx.fillStyle = '#999999';
     ctx.globalAlpha = 0.5;
     ctx.font = '600 14px "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -126,6 +186,15 @@
     ctx.font = '11px "Segoe UI", system-ui, sans-serif';
     ctx.fillText(new Date().toLocaleDateString(), stripW / 2, brandY + 20);
     ctx.globalAlpha = 1;
+
+    // Show overlay image on top of the video layer (if 4-photo template exists)
+    const template = STRIP_TEMPLATES.find(t => t.photoCount === count);
+    if (template) {
+      previewOverlay.src = template.overlay;
+      previewOverlay.classList.remove('hidden');
+    } else {
+      previewOverlay.classList.add('hidden');
+    }
 
     // Position live video elements over the photo slots
     previewVideoLayer.innerHTML = '';
@@ -135,12 +204,12 @@
       const x = padding;
       const y = padding + i * (photoH + gap);
 
-      const slot = document.createElement('div');
-      slot.className = 'preview-video-slot' + (state.filter === 'bw' ? ' bw-preview' : '');
-      slot.style.left = (x * scaleX) + 'px';
-      slot.style.top = (y * scaleX) + 'px';
-      slot.style.width = (photoW * scaleX) + 'px';
-      slot.style.height = (photoH * scaleX) + 'px';
+      const el = document.createElement('div');
+      el.className = 'preview-video-slot' + (state.filter === 'bw' ? ' bw-preview' : '');
+      el.style.left = (x * scaleX) + 'px';
+      el.style.top = (y * scaleX) + 'px';
+      el.style.width = (photoW * scaleX) + 'px';
+      el.style.height = (photoH * scaleX) + 'px';
 
       const vid = document.createElement('video');
       vid.autoplay = true;
@@ -149,8 +218,8 @@
       if (previewStream) {
         vid.srcObject = previewStream;
       }
-      slot.appendChild(vid);
-      previewVideoLayer.appendChild(slot);
+      el.appendChild(vid);
+      previewVideoLayer.appendChild(el);
     }
   }
 
@@ -181,24 +250,15 @@
     });
   });
 
-  // Border style buttons
+  // Border style buttons (edit screen — only solid/tape, not template)
   $$('[data-border]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       $$('[data-border]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.borderStyle = btn.dataset.border;
-      colorPickerSection.classList.toggle('hidden', state.borderStyle === 'tape');
-      updatePreview();
-    });
-  });
-
-  // Photo count buttons
-  $$('[data-count]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      $$('[data-count]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.photoCount = parseInt(btn.dataset.count);
-      updatePreview();
+      state.borderTemplate = null;
+      colorPickerSection.classList.toggle('hidden', state.borderStyle !== 'solid');
+      await renderStrip();
     });
   });
 
@@ -320,95 +380,95 @@
   }
 
   // ── Strip rendering ──
-  function renderStrip() {
+  async function renderStrip() {
     const count = state.photos.length;
-    if (count === 0) return Promise.resolve();
+    if (count === 0) return;
 
-    return new Promise(resolve => {
-      const padding = 30;
-      const gap = 16;
-      const photoW = 400;
-      const photoH = 300;
-      const bottomExtra = 60; // space for branding at bottom
+    const isTemplate = state.borderStyle === 'template' && state.borderTemplate;
+    const { stripW, stripH, padding, gap, photoW, photoH, bottomExtra } = getStripLayout(count);
 
-      const stripW = photoW + padding * 2;
-      const stripH = padding + (photoH + gap) * count - gap + padding + bottomExtra;
+    stripCanvas.width = stripW;
+    stripCanvas.height = stripH;
+    const ctx = stripCanvas.getContext('2d');
 
-      stripCanvas.width = stripW;
-      stripCanvas.height = stripH;
-      const ctx = stripCanvas.getContext('2d');
-
-      // Draw border background
-      if (state.borderStyle === 'tape') {
-        drawTapeBorder(ctx, stripW, stripH);
-      } else {
-        ctx.fillStyle = state.borderColor;
+    // Layer 1: Background
+    if (isTemplate) {
+      const bg = state.borderTemplate.background;
+      if (bg.startsWith('#')) {
+        ctx.fillStyle = bg;
         ctx.fillRect(0, 0, stripW, stripH);
+      } else {
+        const bgImg = await loadTemplateImage(bg);
+        ctx.drawImage(bgImg, 0, 0, stripW, stripH);
       }
+    } else if (state.borderStyle === 'tape') {
+      drawTapeBorder(ctx, stripW, stripH);
+    } else {
+      ctx.fillStyle = state.borderColor;
+      ctx.fillRect(0, 0, stripW, stripH);
+    }
 
-      // Load and draw photos
-      let loaded = 0;
-      state.photos.forEach((src, i) => {
-        const img = new Image();
-        img.onload = () => {
-          const x = padding;
-          const y = padding + i * (photoH + gap);
+    // Layer 2: Photos
+    await Promise.all(state.photos.map((src, i) => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const x = padding;
+        const y = padding + i * (photoH + gap);
 
-          // Draw photo (cover-fit)
-          const srcAspect = img.width / img.height;
-          const dstAspect = photoW / photoH;
-          let sx, sy, sw, sh;
-          if (srcAspect > dstAspect) {
-            sh = img.height;
-            sw = sh * dstAspect;
-            sx = (img.width - sw) / 2;
-            sy = 0;
-          } else {
-            sw = img.width;
-            sh = sw / dstAspect;
-            sx = 0;
-            sy = (img.height - sh) / 2;
-          }
+        const srcAspect = img.width / img.height;
+        const dstAspect = photoW / photoH;
+        let sx, sy, sw, sh;
+        if (srcAspect > dstAspect) {
+          sh = img.height;
+          sw = sh * dstAspect;
+          sx = (img.width - sw) / 2;
+          sy = 0;
+        } else {
+          sw = img.width;
+          sh = sw / dstAspect;
+          sx = 0;
+          sy = (img.height - sh) / 2;
+        }
 
-          // Rounded corners for each photo
-          const r = 6;
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(x + r, y);
-          ctx.lineTo(x + photoW - r, y);
-          ctx.quadraticCurveTo(x + photoW, y, x + photoW, y + r);
-          ctx.lineTo(x + photoW, y + photoH - r);
-          ctx.quadraticCurveTo(x + photoW, y + photoH, x + photoW - r, y + photoH);
-          ctx.lineTo(x + r, y + photoH);
-          ctx.quadraticCurveTo(x, y + photoH, x, y + photoH - r);
-          ctx.lineTo(x, y + r);
-          ctx.quadraticCurveTo(x, y, x + r, y);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(img, sx, sy, sw, sh, x, y, photoW, photoH);
-          ctx.restore();
+        const r = 6;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + photoW - r, y);
+        ctx.quadraticCurveTo(x + photoW, y, x + photoW, y + r);
+        ctx.lineTo(x + photoW, y + photoH - r);
+        ctx.quadraticCurveTo(x + photoW, y + photoH, x + photoW - r, y + photoH);
+        ctx.lineTo(x + r, y + photoH);
+        ctx.quadraticCurveTo(x, y + photoH, x, y + photoH - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, sx, sy, sw, sh, x, y, photoW, photoH);
+        ctx.restore();
+        resolve();
+      };
+      img.src = src;
+    })));
 
-          loaded++;
-          if (loaded === count) {
-            // Draw branding text
-            const brandY = stripH - bottomExtra / 2;
-            const textColor = getContrastText(
-              state.borderStyle === 'tape' ? '#000000' : state.borderColor
-            );
-            ctx.fillStyle = textColor;
-            ctx.globalAlpha = 0.5;
-            ctx.font = '600 14px "Segoe UI", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('Photo Booth', stripW / 2, brandY + 2);
-            ctx.font = '11px "Segoe UI", system-ui, sans-serif';
-            ctx.fillText(new Date().toLocaleDateString(), stripW / 2, brandY + 20);
-            ctx.globalAlpha = 1;
-            resolve();
-          }
-        };
-        img.src = src;
-      });
-    });
+    // Layer 3: Overlay stickers / branding
+    if (isTemplate) {
+      const ovImg = await loadTemplateImage(state.borderTemplate.overlay);
+      ctx.drawImage(ovImg, 0, 0, stripW, stripH);
+    } else {
+      const brandY = stripH - bottomExtra / 2;
+      const textColor = getContrastText(
+        state.borderStyle === 'tape' ? '#000000' : state.borderColor
+      );
+      ctx.fillStyle = textColor;
+      ctx.globalAlpha = 0.5;
+      ctx.font = '600 14px "Segoe UI", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Photo Booth', stripW / 2, brandY + 2);
+      ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+      ctx.fillText(new Date().toLocaleDateString(), stripW / 2, brandY + 20);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawTapeBorder(ctx, w, h) {
@@ -483,23 +543,28 @@
   // ── Stickers ──
   function populateStickers() {
     stickerGrid.innerHTML = '';
-    STICKERS.forEach(emoji => {
+    STICKERS.forEach(sticker => {
       const btn = document.createElement('button');
       btn.className = 'sticker-btn';
-      btn.textContent = emoji;
-      btn.addEventListener('click', () => addStickerToStrip(emoji));
+      const img = document.createElement('img');
+      img.src = sticker.src;
+      img.alt = sticker.name;
+      img.draggable = false;
+      btn.appendChild(img);
+      btn.addEventListener('click', () => addStickerToStrip(sticker.src));
       stickerGrid.appendChild(btn);
     });
   }
 
-  function addStickerToStrip(emoji) {
+  function addStickerToStrip(src) {
     // Place sticker at random position on the strip
     const x = 15 + Math.random() * 60; // percent
     const y = 10 + Math.random() * 75; // percent
 
-    const el = document.createElement('span');
+    const el = document.createElement('img');
     el.className = 'placed-sticker';
-    el.textContent = emoji;
+    el.src = src;
+    el.draggable = false;
     el.style.left = x + '%';
     el.style.top = y + '%';
 
@@ -507,7 +572,7 @@
     makeDraggable(el);
 
     stickerLayer.appendChild(el);
-    state.stickers.push({ emoji, el });
+    state.stickers.push({ src, el });
   }
 
   function makeDraggable(el) {
@@ -569,17 +634,24 @@
 
     // Draw stickers onto canvas
     const stickerEls = stickerLayer.querySelectorAll('.placed-sticker');
-    stickerEls.forEach(el => {
+    for (const el of stickerEls) {
       const elRect = el.getBoundingClientRect();
       const layerRect = stickerLayer.getBoundingClientRect();
 
       const x = (elRect.left - layerRect.left) * scaleX;
       const y = (elRect.top - layerRect.top) * scaleY;
-      const fontSize = parseFloat(getComputedStyle(el).fontSize) * scaleX;
+      const w = elRect.width * scaleX;
+      const h = elRect.height * scaleY;
 
-      ctx.font = `${fontSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-      ctx.fillText(el.textContent, x, y + fontSize * 0.85);
-    });
+      // Load image for canvas drawing
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = el.src;
+      });
+      ctx.drawImage(img, x, y, w, h);
+    }
 
     // Download
     const link = document.createElement('a');
@@ -594,6 +666,12 @@
     populateStickers();
     stickerLayer.innerHTML = '';
     state.stickers = [];
+
+    // Sync edit panel UI with current state
+    $$('[data-border]').forEach(b => b.classList.toggle('active', b.dataset.border === state.borderStyle));
+    $$('.swatch').forEach(b => b.classList.toggle('active', b.dataset.color === state.borderColor));
+    colorPickerSection.classList.toggle('hidden', state.borderStyle !== 'solid');
+
     await renderStrip();
 
     // Size sticker layer to match canvas display size
@@ -611,6 +689,7 @@
   // ── Navigation event listeners ──
   $('#start-btn').addEventListener('click', async () => {
     showScreen('setup');
+    populateTemplates();
     await startPreviewCamera();
     updatePreview();
   });
@@ -635,8 +714,16 @@
   $('#retake-all-btn').addEventListener('click', async () => {
     state.photos = [];
     state.stickers = [];
+    state.borderStyle = 'solid';
+    state.borderColor = '#ffffff';
+    state.borderTemplate = null;
     stickerLayer.innerHTML = '';
+    // Reset edit panel UI
+    $$('[data-border]').forEach(b => b.classList.toggle('active', b.dataset.border === 'solid'));
+    $$('.swatch').forEach(b => b.classList.toggle('active', b.dataset.color === '#ffffff'));
+    colorPickerSection.classList.remove('hidden');
     showScreen('setup');
+    populateTemplates();
     await startPreviewCamera();
     updatePreview();
   });

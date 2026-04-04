@@ -19,7 +19,7 @@
 
     <!-- Setup Screen -->
     <div id="setup-screen" class="screen">
-      <h2>Customize Your Strip</h2>
+      <h2>Set Up Your Shoot</h2>
 
       <div class="setup-layout">
       <div class="setup-options">
@@ -32,35 +32,8 @@
       </div>
 
       <div class="setup-section">
-        <h3>Border Style</h3>
-        <div class="option-group">
-          <button class="option-btn active" data-border="solid">Solid Color</button>
-          <button class="option-btn" data-border="tape">Camera Film</button>
-        </div>
-      </div>
-
-      <div id="color-picker-section" class="setup-section">
-        <h3>Border Color</h3>
-        <div class="color-swatches">
-          <button class="swatch active" data-color="#ffffff" style="background:#ffffff"></button>
-          <button class="swatch" data-color="#000000" style="background:#000000"></button>
-          <button class="swatch" data-color="#e74c3c" style="background:#e74c3c"></button>
-          <button class="swatch" data-color="#e91e63" style="background:#e91e63"></button>
-          <button class="swatch" data-color="#9b59b6" style="background:#9b59b6"></button>
-          <button class="swatch" data-color="#3498db" style="background:#3498db"></button>
-          <button class="swatch" data-color="#1abc9c" style="background:#1abc9c"></button>
-          <button class="swatch" data-color="#2ecc71" style="background:#2ecc71"></button>
-          <button class="swatch" data-color="#f39c12" style="background:#f39c12"></button>
-          <button class="swatch" data-color="#fd79a8" style="background:#fd79a8"></button>
-        </div>
-      </div>
-
-      <div class="setup-section">
-        <h3>Number of Photos</h3>
-        <div class="option-group">
-          <button class="option-btn" data-count="3">3</button>
-          <button class="option-btn active" data-count="4">4</button>
-        </div>
+        <h3>Strip Design</h3>
+        <div class="template-grid" id="template-grid"></div>
       </div>
 
       <button id="to-camera-btn" class="btn btn-primary">Open Camera</button>
@@ -71,6 +44,7 @@
         <div id="preview-strip" class="preview-strip-wrapper">
           <canvas id="preview-canvas"></canvas>
           <div id="preview-video-layer"></div>
+          <img id="preview-overlay" class="preview-overlay hidden" />
         </div>
       </div>
       </div>
@@ -92,18 +66,44 @@
       </div>
     </div>
 
-    <!-- Sticker / Edit Screen -->
+    <!-- Edit Screen -->
     <div id="edit-screen" class="screen">
-      <h2>Decorate Your Strip</h2>
+      <h2>Customize Your Strip</h2>
       <div class="edit-layout">
         <div class="strip-preview-wrapper">
           <canvas id="strip-canvas"></canvas>
           <div id="sticker-layer"></div>
         </div>
-        <div class="sticker-panel">
-          <h3>Stickers</h3>
-          <div class="sticker-grid" id="sticker-grid"></div>
-          <button id="undo-sticker-btn" class="btn btn-secondary btn-small">Undo Last Sticker</button>
+        <div class="edit-panel">
+          <div class="setup-section">
+            <h3>Border Style</h3>
+            <div class="option-group">
+              <button class="option-btn active" data-border="solid">Solid Color</button>
+              <button class="option-btn" data-border="tape">Camera Film</button>
+            </div>
+          </div>
+
+          <div id="color-picker-section" class="setup-section">
+            <h3>Border Color</h3>
+            <div class="color-swatches">
+              <button class="swatch active" data-color="#ffffff" style="background:#ffffff"></button>
+              <button class="swatch" data-color="#000000" style="background:#000000"></button>
+              <button class="swatch" data-color="#e74c3c" style="background:#e74c3c"></button>
+              <button class="swatch" data-color="#e91e63" style="background:#e91e63"></button>
+              <button class="swatch" data-color="#9b59b6" style="background:#9b59b6"></button>
+              <button class="swatch" data-color="#3498db" style="background:#3498db"></button>
+              <button class="swatch" data-color="#1abc9c" style="background:#1abc9c"></button>
+              <button class="swatch" data-color="#2ecc71" style="background:#2ecc71"></button>
+              <button class="swatch" data-color="#f39c12" style="background:#f39c12"></button>
+              <button class="swatch" data-color="#fd79a8" style="background:#fd79a8"></button>
+            </div>
+          </div>
+
+          <div class="setup-section">
+            <h3>Stickers</h3>
+            <div class="sticker-grid" id="sticker-grid"></div>
+            <button id="undo-sticker-btn" class="btn btn-secondary btn-small">Undo Last Sticker</button>
+          </div>
         </div>
       </div>
       <div class="edit-actions">
