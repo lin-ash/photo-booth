@@ -33,7 +33,6 @@
   const stripCanvas   = $('#strip-canvas');
   const stickerLayer  = $('#sticker-layer');
   const stickerGrid   = $('#sticker-grid');
-  const colorPickerSection = $('#color-picker-section');
   const templateGrid = $('#template-grid');
   const previewCanvas = $('#preview-canvas');
   const previewVideoLayer = $('#preview-video-layer');
@@ -54,6 +53,8 @@
   // ── Sticker list (PNG images in /stickers folder) ──
   const STICKERS = [
     { name: 'Charlie', src: 'stickers/charlie.png' },
+    { name: 'Bulbasaur', src: 'stickers/bulbasaur.png' },
+    { name: 'Pachirisu', src: 'stickers/pachirisu.png' },
   ];
 
   // ── Template image cache ──
@@ -187,12 +188,12 @@
     ctx.fillText(new Date().toLocaleDateString(), stripW / 2, brandY + 20);
     ctx.globalAlpha = 1;
 
-    // Show overlay image on top of the video layer (if 4-photo template exists)
-    const template = STRIP_TEMPLATES.find(t => t.photoCount === count);
-    if (template) {
-      previewOverlay.src = template.overlay;
+    // Show overlay image on top of the video layer only if the user selected a template
+    if (state.borderTemplate) {
+      previewOverlay.src = state.borderTemplate.overlay;
       previewOverlay.classList.remove('hidden');
     } else {
+      previewOverlay.removeAttribute('src');
       previewOverlay.classList.add('hidden');
     }
 
@@ -246,28 +247,6 @@
       $$('[data-filter]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.filter = btn.dataset.filter;
-      updatePreview();
-    });
-  });
-
-  // Border style buttons (edit screen — only solid/tape, not template)
-  $$('[data-border]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      $$('[data-border]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.borderStyle = btn.dataset.border;
-      state.borderTemplate = null;
-      colorPickerSection.classList.toggle('hidden', state.borderStyle !== 'solid');
-      await renderStrip();
-    });
-  });
-
-  // Color swatches
-  $$('.swatch').forEach(btn => {
-    btn.addEventListener('click', () => {
-      $$('.swatch').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.borderColor = btn.dataset.color;
       updatePreview();
     });
   });
@@ -667,11 +646,6 @@
     stickerLayer.innerHTML = '';
     state.stickers = [];
 
-    // Sync edit panel UI with current state
-    $$('[data-border]').forEach(b => b.classList.toggle('active', b.dataset.border === state.borderStyle));
-    $$('.swatch').forEach(b => b.classList.toggle('active', b.dataset.color === state.borderColor));
-    colorPickerSection.classList.toggle('hidden', state.borderStyle !== 'solid');
-
     await renderStrip();
 
     // Size sticker layer to match canvas display size
@@ -718,10 +692,6 @@
     state.borderColor = '#ffffff';
     state.borderTemplate = null;
     stickerLayer.innerHTML = '';
-    // Reset edit panel UI
-    $$('[data-border]').forEach(b => b.classList.toggle('active', b.dataset.border === 'solid'));
-    $$('.swatch').forEach(b => b.classList.toggle('active', b.dataset.color === '#ffffff'));
-    colorPickerSection.classList.remove('hidden');
     showScreen('setup');
     populateTemplates();
     await startPreviewCamera();
